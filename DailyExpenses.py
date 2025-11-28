@@ -7,11 +7,53 @@ import calendar
 import altair as alt
 
 # -----------------------
-# 1. CONFIGURATION & SETUP
+# 1. PAGE CONFIGURATION
+# -----------------------
+st.set_page_config(page_title="Ultimate Finance Tracker", page_icon="💰", layout="wide")
+
+# -----------------------
+# 2. LOGIN SYSTEM
+# -----------------------
+def check_password():
+    """Returns `True` if the user had the correct password."""
+    
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state["password"] == st.secrets["login"]["password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Don't store the password
+        else:
+            st.session_state["password_correct"] = False
+
+    # Initialize session state for password_correct
+    if "password_correct" not in st.session_state:
+        st.session_state["password_correct"] = False
+
+    # Show input if not logged in
+    if not st.session_state["password_correct"]:
+        st.text_input(
+            "🔒 Please enter your password", 
+            type="password", 
+            on_change=password_entered, 
+            key="password"
+        )
+        if "password_correct" in st.session_state and st.session_state["password_correct"] is False:
+            st.error("😕 Password incorrect")
+        return False
+    else:
+        return True
+
+if not check_password():
+    st.stop()  # STOPS THE APP HERE if not logged in
+
+# =========================================================
+#  🎉 LOGGED IN! THE REST OF YOUR APP STARTS BELOW
+# =========================================================
+
+# -----------------------
+# 3. CONFIGURATION & SETUP
 # -----------------------
 SPREADSHEET_NAME = "DailyExpenses"
-
-st.set_page_config(page_title="Ultimate Finance Tracker", page_icon="💰", layout="wide")
 
 # Categories List
 CATEGORIES = [
@@ -21,20 +63,18 @@ CATEGORIES = [
 ]
 
 # -----------------------
-# 2. DATA LOADING (CLOUD READY)
+# 4. DATA LOADING (CLOUD READY)
 # -----------------------
 @st.cache_resource
 def get_client():
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     
-    # Check if we are on Streamlit Cloud (Secrets exist)
     if "gcp_service_account" in st.secrets:
         creds_dict = st.secrets["gcp_service_account"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         return gspread.authorize(creds)
     else:
-        # Fallback error if secrets are missing
-        st.error("🚨 Secrets not found! Please set up 'gcp_service_account' in Streamlit Cloud settings.")
+        st.error("🚨 Secrets not found! Please check Streamlit Cloud settings.")
         st.stop()
 
 def get_data():
@@ -42,7 +82,7 @@ def get_data():
     try:
         sh = client.open(SPREADSHEET_NAME)
     except gspread.SpreadsheetNotFound:
-        st.error(f"❌ Spreadsheet '{SPREADSHEET_NAME}' not found. Please share your Google Sheet with the Service Account email.")
+        st.error(f"❌ Spreadsheet '{SPREADSHEET_NAME}' not found.")
         st.stop()
     
     # 1. Expenses
@@ -78,12 +118,11 @@ except Exception as e:
     st.stop()
 
 # -----------------------
-# 3. SMART NOTIFICATION (Day 25 Logic)
+# 5. SMART NOTIFICATION (Day 25 Logic)
 # -----------------------
 today = datetime.now()
 curr_month_str = today.strftime("%Y-%m")
 
-# Next Month Calculation
 if today.month == 12:
     next_month_str = f"{today.year + 1}-01"
 else:
@@ -96,14 +135,12 @@ else:
     target_plan_month = curr_month_str
     prompt_msg = f"⚠️ Action: Set Income for {curr_month_str}"
 
-# Check Income Existence
 income_exists = False
 if not df_inc.empty:
     match = df_inc[df_inc["Month_Year"] == target_plan_month]
     if not match.empty:
         income_exists = True
 
-# Notification Widget
 if not income_exists and not st.session_state.get('skip_prompt', False):
     with st.expander(prompt_msg, expanded=True):
         st.write("Start your budget by setting your expected Income/Salary.")
@@ -119,9 +156,13 @@ if not income_exists and not st.session_state.get('skip_prompt', False):
             st.rerun()
 
 # -----------------------
-# 4. MAIN LAYOUT
+# 6. MAIN LAYOUT
 # -----------------------
 st.title("💰 Smart Finance Tracker")
+if st.button("🔒 Logout"):
+    st.session_state["password_correct"] = False
+    st.rerun()
+
 tab1, tab2, tab3, tab4 = st.tabs(["💸 Add Daily Expense", "📊 Dashboard", "📅 Analysis", "📝 Budget Planner"])
 
 # ==========================================
@@ -144,22 +185,19 @@ with tab1:
             st.cache_data.clear()
 
 # ==========================================
-# TAB 2: DASHBOARD (FIXED COLOR LOGIC)
+# TAB 2: DASHBOARD
 # ==========================================
 with tab2:
     if df_exp.empty:
         st.info("No expenses yet.")
     else:
-        # Context: Current Month Only
         dash_df = df_exp[(df_exp["Date"].dt.month == today.month) & (df_exp["Date"].dt.year == today.year)]
         
-        # 1. Get Income
         curr_sal = 0.0
         if not df_inc.empty:
             m = df_inc[df_inc["Month_Year"] == curr_month_str]
             if not m.empty: curr_sal = float(m.iloc[-1]["Amount"])
 
-        # 2. Get Planned
         curr_plan = pd.DataFrame()
         if not df_cat_bud.empty:
             raw_plan = df_cat_bud[df_cat_bud["Month_Year"] == curr_month_str]
@@ -168,12 +206,10 @@ with tab2:
         total_spent = dash_df["Amount"].sum()
         total_planned = curr_plan["Planned_Amount"].sum() if not curr_plan.empty else 0
         
-        # Forecast
         days_passed = today.day
         days_in_month = calendar.monthrange(today.year, today.month)[1]
         projected = (total_spent / days_passed) * days_in_month if days_passed > 0 else 0
 
-        # KPI Row
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("💵 Income", f"₹{curr_sal:,.0f}")
         k2.metric("📉 Planned Budget", f"₹{total_planned:,.0f}")
@@ -182,7 +218,6 @@ with tab2:
 
         st.divider()
 
-        # Chart: Plan vs Actual (FIXED: Calculated Column Approach)
         col_chart, col_data = st.columns([2, 1])
         
         with col_chart:
@@ -196,26 +231,21 @@ with tab2:
                 merged = actual_grp.rename(columns={"Amount": "Actual"})
                 merged["Planned"] = 0
             
-            # Determine Color in Python (Much Safer)
             merged["Is_Over_Budget"] = merged["Actual"] > merged["Planned"]
             melted = merged.melt(id_vars=["Category", "Is_Over_Budget"], value_vars=["Planned", "Actual"], var_name="Type", value_name="Amount")
             
             def get_bar_color(row):
-                if row["Type"] == "Planned":
-                    return "#e0e0e0" # Gray
-                elif row["Is_Over_Budget"]:
-                    return "#ff4b4b" # Red
-                else:
-                    return "#2ca02c" # Green
+                if row["Type"] == "Planned": return "#e0e0e0" 
+                elif row["Is_Over_Budget"]: return "#ff4b4b" 
+                else: return "#2ca02c" 
 
             melted["Color"] = melted.apply(get_bar_color, axis=1)
 
-            # Chart using the pre-calculated Color column
             chart = alt.Chart(melted).mark_bar().encode(
                 x=alt.X('Category:N', sort='-y'),
                 y='Amount:Q',
                 xOffset='Type:N',
-                color=alt.Color('Color', scale=None, legend=None), # Direct Color Mapping
+                color=alt.Color('Color', scale=None, legend=None), 
                 tooltip=['Category', 'Type', 'Amount']
             ).properties(height=350)
             
@@ -232,19 +262,17 @@ with tab2:
             else:
                 st.success("All Good!")
 
-        # Daily Trend
         st.subheader("📈 Daily Trend")
         daily = dash_df.groupby("Date")["Amount"].sum().reset_index()
         st.line_chart(daily.set_index("Date"))
 
 # ==========================================
-# TAB 3: ANALYSIS (Weekly + Monthly)
+# TAB 3: ANALYSIS
 # ==========================================
 with tab3:
     if df_exp.empty:
         st.write("No data.")
     else:
-        # --- NEW: WEEKLY TREND SECTION ---
         st.subheader("📅 Weekly Operating Expenses")
         st.caption("Excludes Rent, House, TV, Gifts")
         
@@ -265,7 +293,6 @@ with tab3:
         
         st.divider()
 
-        # --- MONTH VS MONTH ---
         st.subheader("🆚 History: This Month vs Last Month")
         
         first_day_curr = today.replace(day=1)
@@ -302,7 +329,6 @@ with tab4:
     plan_month_opt = st.radio("Select Month to Plan:", [curr_month_str, next_month_str], horizontal=True)
     col_left, col_right = st.columns([1, 1.5])
 
-    # Inputs
     with col_left:
         current_salary = 0.0
         if not df_inc.empty:
@@ -333,7 +359,6 @@ with tab4:
                     st.cache_data.clear()
                     st.rerun()
 
-    # Preview Table
     with col_right:
         st.write("### 📋 Budget Plan")
         plan_df = pd.DataFrame()
