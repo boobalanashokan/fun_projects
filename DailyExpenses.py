@@ -258,7 +258,11 @@ with tab2:
             over_budget["Over By"] = over_budget["Diff"].abs()
             
             if not over_budget.empty:
-                st.dataframe(over_budget[["Category", "Over By"]].style.format("₹{:.0f}"), use_container_width=True, hide_index=True)
+                st.dataframe(
+                    over_budget[["Category", "Over By"]].style.format({"Over By": "₹{:.0f}"}), 
+                    use_container_width=True, 
+                    hide_index=True
+                )
             else:
                 st.success("All Good!")
 
