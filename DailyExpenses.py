@@ -9,7 +9,7 @@ import altair as alt
 # -----------------------
 # 1. PAGE CONFIGURATION
 # -----------------------
-st.set_page_config(page_title="Ultimate Finance Tracker", page_icon="💰", layout="wide")
+st.set_page_config(page_title="Finance Tracker", page_icon="💰", layout="wide")
 
 # -----------------------
 # 2. LOGIN SYSTEM
@@ -57,7 +57,7 @@ SPREADSHEET_NAME = "DailyExpenses"
 
 # Categories List
 CATEGORIES = [
-    "Groceries", "Outside Food", "Snacks", "Petrol", 
+    "Groceries", "Outside Food", "Lunch", "Snacks", "Petrol", 
     "Trip", "Phone", "Bike", "Medical", 
     "Rent", "House", "Personal", "Others", "TV/Subscriptions", "Gifts"
 ]
