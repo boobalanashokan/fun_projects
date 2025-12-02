@@ -284,11 +284,36 @@ with tab3:
         weekly_df = df_exp[~df_exp["Category"].isin(excluded_cats)].copy()
         
         if not weekly_df.empty:
+            # --- NEW CODE START ---
+            # 1. Ensure Date is datetime
+            weekly_df['Date'] = pd.to_datetime(weekly_df['Date'])
+            
+            # 2. Calculate the 'Week of Month' (Mathematical: days 1-7 = Week 1, etc.)
+            weekly_df['Week_Num'] = (weekly_df['Date'].dt.day - 1) // 7 + 1
+            
+            # 3. Create a helper for suffixes (1st, 2nd, 3rd)
+            def get_suffix(n):
+                return {1: 'st', 2: 'nd', 3: 'rd'}.get(n, 'th')
+
+            # 4. Create the formatted String (e.g., "Dec 1st Week")
+            weekly_df['Custom_Label'] = weekly_df.apply(
+                lambda x: f"{x['Date'].strftime('%b')} {x['Week_Num']}{get_suffix(x['Week_Num'])} Week", 
+                axis=1
+            )
+            # --- NEW CODE END ---
+
             weekly_chart = alt.Chart(weekly_df).mark_bar().encode(
-                x=alt.X('yearweek(Date):O', title="Week"), 
+                # Use the new Custom_Label column
+                x=alt.X('Custom_Label', 
+                        title="Week",
+                        # IMPORTANT: Sort by the actual Date, otherwise "Aug" comes before "Dec" alphabetically
+                        sort=alt.EncodingSortField(field="Date", op="min", order="ascending")
+                ), 
                 y=alt.Y('sum(Amount):Q', title="Total Spent"),
                 color=alt.Color('Category:N'),
-                tooltip=['yearweek(Date):O', 'Category', 'sum(Amount):Q']
+                
+                # Update tooltip to show the new label
+                tooltip=['Custom_Label', 'Category', 'sum(Amount):Q']
             ).properties(height=400)
             
             st.altair_chart(weekly_chart, use_container_width=True)
